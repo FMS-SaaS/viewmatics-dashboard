@@ -1539,16 +1539,28 @@ function EmployeeDirectoryPage({ selectedSite }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
+  const [sitesList, setSitesList] = useState([]);
+  const [designationsList, setDesignationsList] = useState([]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Add Employee form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newSiteId, setNewSiteId] = useState("");
+  const [newDesignationId, setNewDesignationId] = useState("");
+  const [newRole, setNewRole] = useState("user");
+  const [newContact, setNewContact] = useState("");
+  const [newDoj, setNewDoj] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const loadEmployees = () => {
     setLoading(true);
     setFetchError("");
-    supabaseClient
+    return supabaseClient
       .from("employees")
       .select("*, sites(name), designations(name)")
       .then(({ data, error }) => {
-        if (cancelled) return;
         if (error) {
           setFetchError(error.message);
           setLoading(false);
@@ -1569,8 +1581,50 @@ function EmployeeDirectoryPage({ selectedSite }) {
         setEmployees(mapped);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    loadEmployees();
+    // Sites/Designations power the Add Employee dropdowns — need the real
+    // IDs from the database, not just names, since that's what the
+    // employees table actually stores as foreign keys.
+    supabaseClient.from("sites").select("*").then(({ data }) => { if (!cancelled) setSitesList(data || []); });
+    supabaseClient.from("designations").select("*").then(({ data }) => { if (!cancelled) setDesignationsList(data || []); });
     return () => { cancelled = true; };
   }, []);
+
+  const resetAddForm = () => {
+    setNewCode(""); setNewName(""); setNewSiteId(""); setNewDesignationId("");
+    setNewRole("user"); setNewContact(""); setNewDoj(""); setSaveError("");
+  };
+
+  const submitNewEmployee = async () => {
+    if (!newCode.trim() || !newName.trim() || !newSiteId || !newDesignationId) {
+      setSaveError("Employee Code, Name, Site, and Designation are required.");
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
+    const { error } = await supabaseClient.from("employees").insert({
+      employee_code: newCode.trim(),
+      name: newName.trim(),
+      site_id: newSiteId,
+      designation_id: newDesignationId,
+      role: newRole,
+      contact: newContact.trim() || null,
+      date_of_joining: newDoj || null,
+      active: true,
+    });
+    setSaving(false);
+    if (error) {
+      setSaveError(error.message);
+      return;
+    }
+    resetAddForm();
+    setShowAddForm(false);
+    loadEmployees(); // refresh the list so the new employee shows up immediately
+  };
 
   const filtered = employees.filter(e => {
     const q = query.toLowerCase();
@@ -1583,9 +1637,17 @@ function EmployeeDirectoryPage({ selectedSite }) {
   return (
     <div>
       <Card style={{ marginBottom: 20 }}>
-        <Field2 label="Search by name, code, or designation">
-          <input style={inputStyle} value={query} onChange={e => setQuery(e.target.value)} placeholder="e.g. Ramesh, EMP-2291, Technician" />
-        </Field2>
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <Field2 label="Search by name, code, or designation">
+              <input style={inputStyle} value={query} onChange={e => setQuery(e.target.value)} placeholder="e.g. Ramesh, EMP-2291, Technician" />
+            </Field2>
+          </div>
+          <button onClick={() => setShowAddForm(true)} style={{
+            display: "flex", alignItems: "center", gap: 6, background: C.primary, border: "none", borderRadius: 9,
+            padding: "10px 16px", color: "#fff", fontFamily: bodyFont, fontWeight: 600, fontSize: 13, cursor: "pointer",
+          }}><UserRound size={14} /> Add Employee</button>
+        </div>
       </Card>
 
       {loading ? (
@@ -1615,6 +1677,41 @@ function EmployeeDirectoryPage({ selectedSite }) {
             <div style={{ padding: 20, textAlign: "center", color: C.inkSoft, fontFamily: bodyFont, fontSize: 13 }}>No employees yet — this will fill in as people are added to the system.</div>
           )}
         </Card>
+      )}
+
+      {showAddForm && (
+        <Modal title="Add Employee" onClose={() => { setShowAddForm(false); resetAddForm(); }} width={440}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Field2 label="Employee Code"><input style={inputStyle} value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="e.g. EMP-0002" /></Field2>
+            <Field2 label="Name"><input style={inputStyle} value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full name" /></Field2>
+            <Field2 label="Site">
+              <select style={selectStyle} value={newSiteId} onChange={e => setNewSiteId(e.target.value)}>
+                <option value="">Select a site</option>
+                {sitesList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field2>
+            <Field2 label="Designation">
+              <select style={selectStyle} value={newDesignationId} onChange={e => setNewDesignationId(e.target.value)}>
+                <option value="">Select a designation</option>
+                {designationsList.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </Field2>
+            <Field2 label="Role">
+              <select style={selectStyle} value={newRole} onChange={e => setNewRole(e.target.value)}>
+                <option value="user">Worker</option>
+                <option value="supervisor_admin">Supervisor Admin</option>
+                <option value="master_admin">Master Admin</option>
+              </select>
+            </Field2>
+            <Field2 label="Contact"><input style={inputStyle} value={newContact} onChange={e => setNewContact(e.target.value)} placeholder="+91 XXXXX XXXXX" /></Field2>
+            <Field2 label="Date of Joining"><input type="date" style={inputStyle} value={newDoj} onChange={e => setNewDoj(e.target.value)} /></Field2>
+            {saveError && <div style={{ fontFamily: bodyFont, fontSize: 12, color: C.danger }}>{saveError}</div>}
+            <button onClick={submitNewEmployee} disabled={saving} style={{
+              width: "100%", background: saving ? C.inkSoft : C.primary, border: "none", borderRadius: 9, padding: "12px 0",
+              color: "#fff", fontFamily: bodyFont, fontWeight: 600, fontSize: 14, cursor: saving ? "default" : "pointer", marginTop: 4,
+            }}>{saving ? "Saving..." : "Save Employee"}</button>
+          </div>
+        </Modal>
       )}
 
       {openEmp && (
