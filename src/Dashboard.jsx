@@ -1541,6 +1541,7 @@ function EmployeeDirectoryPage({ selectedSite }) {
   const [fetchError, setFetchError] = useState("");
   const [sitesList, setSitesList] = useState([]);
   const [designationsList, setDesignationsList] = useState([]);
+  const [lookupError, setLookupError] = useState("");
 
   // Add Employee form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -1589,8 +1590,16 @@ function EmployeeDirectoryPage({ selectedSite }) {
     // Sites/Designations power the Add Employee dropdowns — need the real
     // IDs from the database, not just names, since that's what the
     // employees table actually stores as foreign keys.
-    supabaseClient.from("sites").select("*").then(({ data }) => { if (!cancelled) setSitesList(data || []); });
-    supabaseClient.from("designations").select("*").then(({ data }) => { if (!cancelled) setDesignationsList(data || []); });
+    supabaseClient.from("sites").select("*").then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setLookupError(prev => prev + (prev ? " | " : "") + "Sites: " + error.message); return; }
+      setSitesList(data || []);
+    });
+    supabaseClient.from("designations").select("*").then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setLookupError(prev => prev + (prev ? " | " : "") + "Designations: " + error.message); return; }
+      setDesignationsList(data || []);
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -1682,6 +1691,16 @@ function EmployeeDirectoryPage({ selectedSite }) {
       {showAddForm && (
         <Modal title="Add Employee" onClose={() => { setShowAddForm(false); resetAddForm(); }} width={440}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {lookupError && (
+              <div style={{ fontFamily: bodyFont, fontSize: 12, color: C.danger, background: C.dangerTint, padding: "10px 12px", borderRadius: 8 }}>
+                Couldn't load Site/Designation options: {lookupError}
+              </div>
+            )}
+            {!lookupError && sitesList.length === 0 && (
+              <div style={{ fontFamily: bodyFont, fontSize: 12, color: C.inkSoft, background: C.accentTint, padding: "10px 12px", borderRadius: 8 }}>
+                No sites found in the database yet — the dropdown will stay empty until some exist.
+              </div>
+            )}
             <Field2 label="Employee Code"><input style={inputStyle} value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="e.g. EMP-0002" /></Field2>
             <Field2 label="Name"><input style={inputStyle} value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full name" /></Field2>
             <Field2 label="Site">
