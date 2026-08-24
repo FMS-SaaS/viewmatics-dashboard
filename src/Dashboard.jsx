@@ -202,8 +202,10 @@ const ORG_DIRECTORY = [
   { code: "EMP-2360", name: "Neha Joshi", designation: "Housekeeping", site: "DLF Cyber Hub — Tower A", contact: "+91 98220 11232", doj: "2024-02-17", pan: "ABCPJ9014C", aadhaar: "XXXX-XXXX-0487" },
 ];
 
-function calcTenure(dojISO, todayISO = "2026-07-22") {
-  const doj = new Date(dojISO), today = new Date(todayISO);
+function calcTenure(dojISO, todayISO = null) {
+  // Defaults to the real current date now, not a frozen mock date — matters
+  // once real employees with real join dates exist in production.
+  const doj = new Date(dojISO), today = todayISO ? new Date(todayISO) : new Date();
   let years = today.getFullYear() - doj.getFullYear();
   let months = today.getMonth() - doj.getMonth();
   if (today.getDate() < doj.getDate()) months -= 1;
